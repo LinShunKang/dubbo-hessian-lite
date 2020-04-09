@@ -81,13 +81,11 @@ import java.util.logging.Logger;
 public class Hessian2Input
         extends AbstractHessianInput
         implements Hessian2Constants {
-    private static final Logger log
-            = Logger.getLogger(Hessian2Input.class.getName());
 
-    private static final double D_256 = 1.0 / 256.0;
+    private static final Logger log = Logger.getLogger(Hessian2Input.class.getName());
+
     private static final int END_OF_DATA = -2;
-    private static final int SIZE = 256;
-    private static final int GAP = 16;
+    private static final int SIZE = 1024;
     private static Field _detailMessageField;
     private static boolean _isCloseStreamOnClose;
 
@@ -102,16 +100,14 @@ public class Hessian2Input
     private final byte[] _buffer = new byte[SIZE];
     // factory for deserializing objects in the input stream
     protected SerializerFactory _serializerFactory;
-    protected ArrayList _refs;
-    protected ArrayList _classDefs;
-    protected ArrayList _types;
+    protected final ArrayList<Object> _refs = new ArrayList<>();
+    protected final ArrayList<Object> _classDefs = new ArrayList<>();
+    protected final ArrayList<Object> _types = new ArrayList<>();
     // the underlying input stream
     private InputStream _is;
     // a peek character
     private int _offset;
     private int _length;
-    // true for streaming data
-    private boolean _isStreaming;
     // the method for a call
     private String _method;
     private Throwable _replyFault;
@@ -151,11 +147,10 @@ public class Hessian2Input
      */
     public final SerializerFactory findSerializerFactory() {
         SerializerFactory factory = _serializerFactory;
-
-        if (factory == null)
-            _serializerFactory = factory = new SerializerFactory();
-
-        return factory;
+        if (factory != null) {
+            return factory;
+        }
+        return _serializerFactory = new SerializerFactory();
     }
 
     public boolean isCloseStreamOnClose() {
@@ -190,14 +185,8 @@ public class Hessian2Input
 
     public void reset() {
         resetReferences();
-
-        if (_classDefs != null) {
-            _classDefs.clear();
-        }
-
-        if (_types != null) {
-            _types.clear();
-        }
+        _classDefs.clear();
+        _types.clear();
 
         _offset = 0;
         _length = 0;
@@ -253,12 +242,12 @@ public class Hessian2Input
             int minor = read();
 
             version = (major << 16) + minor;
-
             tag = read();
         }
 
-        if (tag != 'E')
+        if (tag != 'E') {
             throw error("expected hessian Envelope ('E') at " + codeName(tag));
+        }
 
         return version;
     }
@@ -276,8 +265,9 @@ public class Hessian2Input
             throws IOException {
         int tag = read();
 
-        if (tag != 'Z')
-            error("expected end of envelope at " + codeName(tag));
+        if (tag != 'Z') {
+            throw error("expected end of envelope at " + codeName(tag));
+        }
     }
 
     /**
@@ -292,9 +282,7 @@ public class Hessian2Input
     @Override
     public String readMethod()
             throws IOException {
-        _method = readString();
-
-        return _method;
+        return _method = readString();
     }
 
     /**
@@ -324,7 +312,6 @@ public class Hessian2Input
     public void startCall()
             throws IOException {
         readCall();
-
         readMethod();
     }
 
@@ -349,7 +336,6 @@ public class Hessian2Input
     public Object readReply(Class expectedClass)
             throws Throwable {
         int tag = read();
-
         if (tag == 'R')
             return readObject(expectedClass);
         else if (tag == 'F') {
@@ -362,7 +348,6 @@ public class Hessian2Input
 
             try {
                 int ch;
-
                 while ((ch = read()) >= 0) {
                     sb.append((char) ch);
                 }
@@ -370,8 +355,7 @@ public class Hessian2Input
                 log.log(Level.FINE, e.toString(), e);
             }
 
-            throw error("expected hessian reply at " + codeName(tag) + "\n"
-                    + sb);
+            throw error("expected hessian reply at " + codeName(tag) + "\n" + sb);
         }
     }
 
@@ -1815,7 +1799,6 @@ public class Hessian2Input
 
                 _sbuf.setLength(0);
                 int ch;
-
                 while ((ch = parseChar()) >= 0)
                     _sbuf.append((char) ch);
 
@@ -1856,7 +1839,7 @@ public class Hessian2Input
             case 0x1e:
             case 0x1f:
                 _isLastChunk = true;
-                _chunkLength = tag - 0x00;
+                _chunkLength = tag;
 
                 _sbuf.setLength(0);
 
@@ -2819,24 +2802,19 @@ public class Hessian2Input
      * O string <int> (string)* <value>*
      * </pre>
      */
-    private void readObjectDefinition(Class cl)
+    private void readObjectDefinition(Class<?> cl)
             throws IOException {
         String type = readString();
         int len = readInt();
-
         String[] fieldNames = new String[len];
-        for (int i = 0; i < len; i++)
+        for (int i = 0; i < len; i++) {
             fieldNames[i] = readString();
+        }
 
-        ObjectDefinition def = new ObjectDefinition(type, fieldNames);
-
-        if (_classDefs == null)
-            _classDefs = new ArrayList();
-
-        _classDefs.add(def);
+        _classDefs.add(new ObjectDefinition(type, fieldNames));
     }
 
-    private Object readObjectInstance(Class cl, ObjectDefinition def)
+    private Object readObjectInstance(Class<?> cl, ObjectDefinition def)
             throws IOException {
         String type = def.getType();
         String[] fieldNames = def.getFieldNames();
@@ -2851,34 +2829,6 @@ public class Hessian2Input
         }
     }
 
-    private String readLenString()
-            throws IOException {
-        int len = readInt();
-
-        _isLastChunk = true;
-        _chunkLength = len;
-
-        _sbuf.setLength(0);
-        int ch;
-        while ((ch = parseChar()) >= 0)
-            _sbuf.append((char) ch);
-
-        return _sbuf.toString();
-    }
-
-    private String readLenString(int len)
-            throws IOException {
-        _isLastChunk = true;
-        _chunkLength = len;
-
-        _sbuf.setLength(0);
-        int ch;
-        while ((ch = parseChar()) >= 0)
-            _sbuf.append((char) ch);
-
-        return _sbuf.toString();
-    }
-
     /**
      * Reads a remote object.
      */
@@ -2887,7 +2837,6 @@ public class Hessian2Input
             throws IOException {
         String type = readType();
         String url = readString();
-
         return resolveRemote(type, url);
     }
 
@@ -2925,16 +2874,14 @@ public class Hessian2Input
     public boolean isEnd()
             throws IOException {
         int code;
-
-        if (_offset < _length)
+        if (_offset < _length) {
             code = (_buffer[_offset] & 0xff);
-        else {
+        } else {
             code = read();
-
-            if (code >= 0)
+            if (code >= 0) {
                 _offset--;
+            }
         }
-
         return (code < 0 || code == 'Z');
     }
 
@@ -2945,13 +2892,13 @@ public class Hessian2Input
     public void readEnd()
             throws IOException {
         int code = _offset < _length ? (_buffer[_offset++] & 0xff) : read();
-
-        if (code == 'Z')
+        if (code == 'Z') {
             return;
-        else if (code < 0)
+        } else if (code < 0) {
             throw error("unexpected end of file");
-        else
+        } else {
             throw error("unknown code:" + codeName(code));
+        }
     }
 
     /**
@@ -2961,9 +2908,9 @@ public class Hessian2Input
     public void readMapEnd()
             throws IOException {
         int code = _offset < _length ? (_buffer[_offset++] & 0xff) : read();
-
-        if (code != 'Z')
+        if (code != 'Z') {
             throw error("expected end of map ('Z') at '" + codeName(code) + "'");
+        }
     }
 
     /**
@@ -2973,9 +2920,9 @@ public class Hessian2Input
     public void readListEnd()
             throws IOException {
         int code = _offset < _length ? (_buffer[_offset++] & 0xff) : read();
-
-        if (code != 'Z')
+        if (code != 'Z') {
             throw error("expected end of list ('Z') at '" + codeName(code) + "'");
+        }
     }
 
     /**
@@ -2983,11 +2930,7 @@ public class Hessian2Input
      */
     @Override
     public int addRef(Object ref) {
-        if (_refs == null)
-            _refs = new ArrayList();
-
         _refs.add(ref);
-
         return _refs.size() - 1;
     }
 
@@ -3004,15 +2947,12 @@ public class Hessian2Input
      */
     @Override
     public void resetReferences() {
-        if (_refs != null)
-            _refs.clear();
+        _refs.clear();
     }
 
     public Object readStreamingObject()
             throws IOException {
-        if (_refs != null)
-            _refs.clear();
-
+        _refs.clear();
         return readObject();
     }
 
@@ -3022,11 +2962,11 @@ public class Hessian2Input
     public Object resolveRemote(String type, String url)
             throws IOException {
         HessianRemoteResolver resolver = getRemoteResolver();
-
-        if (resolver != null)
+        if (resolver != null) {
             return resolver.lookup(type, url);
-        else
+        } else {
             return new HessianRemote(type, url);
+        }
     }
 
     /**
@@ -3085,21 +3025,15 @@ public class Hessian2Input
             case BC_STRING_CHUNK:
             case 'S': {
                 String type = readString();
-
-                if (_types == null)
-                    _types = new ArrayList();
-
                 _types.add(type);
-
                 return type;
             }
 
             default: {
                 int ref = readInt();
-
-                if (_types.size() <= ref)
+                if (_types.size() <= ref) {
                     throw new IndexOutOfBoundsException("type ref #" + ref + " is greater than the number of valid types (" + _types.size() + ")");
-
+                }
                 return (String) _types.get(ref);
             }
         }
@@ -3128,11 +3062,10 @@ public class Hessian2Input
     private int parseInt()
             throws IOException {
         int offset = _offset;
-
         if (offset + 3 < _length) {
             byte[] buffer = _buffer;
 
-            int b32 = buffer[offset + 0] & 0xff;
+            int b32 = buffer[offset] & 0xff;
             int b24 = buffer[offset + 1] & 0xff;
             int b16 = buffer[offset + 2] & 0xff;
             int b8 = buffer[offset + 3] & 0xff;
@@ -3188,32 +3121,24 @@ public class Hessian2Input
     private double parseDouble()
             throws IOException {
         long bits = parseLong();
-
         return Double.longBitsToDouble(bits);
-    }
-
-    org.w3c.dom.Node parseXML()
-            throws IOException {
-        throw new UnsupportedOperationException();
     }
 
     private boolean parseChunkLength()
             throws IOException {
-        if (_isLastChunk)
+        if (_isLastChunk) {
             return false;
+        }
 
         int code = _offset < _length ? (_buffer[_offset++] & 0xff) : read();
-
         switch (code) {
             case BC_STRING_CHUNK:
                 _isLastChunk = false;
-
                 _chunkLength = (read() << 8) + read();
                 break;
 
             case 'S':
                 _isLastChunk = true;
-
                 _chunkLength = (read() << 8) + read();
                 break;
 
@@ -3251,7 +3176,7 @@ public class Hessian2Input
             case 0x1e:
             case 0x1f:
                 _isLastChunk = true;
-                _chunkLength = code - 0x00;
+                _chunkLength = code;
                 break;
 
             case 0x30:
@@ -3275,8 +3200,9 @@ public class Hessian2Input
     private int parseChar()
             throws IOException {
         while (_chunkLength <= 0) {
-            if (!parseChunkLength())
+            if (!parseChunkLength()) {
                 return -1;
+            }
         }
 
         _chunkLength--;
@@ -3290,22 +3216,18 @@ public class Hessian2Input
     private int parseUTF8Char()
             throws IOException {
         int ch = _offset < _length ? (_buffer[_offset++] & 0xff) : read();
-
-        if (ch < 0x80)
+        if (ch < 0x80) {
             return ch;
-        else if ((ch & 0xe0) == 0xc0) {
+        } else if ((ch & 0xe0) == 0xc0) {
             int ch1 = read();
-            int v = ((ch & 0x1f) << 6) + (ch1 & 0x3f);
-
-            return v;
+            return ((ch & 0x1f) << 6) + (ch1 & 0x3f);
         } else if ((ch & 0xf0) == 0xe0) {
             int ch1 = read();
             int ch2 = read();
-            int v = ((ch & 0x0f) << 12) + ((ch1 & 0x3f) << 6) + (ch2 & 0x3f);
-
-            return v;
-        } else
+            return ((ch & 0x0f) << 12) + ((ch1 & 0x3f) << 6) + (ch2 & 0x3f);
+        } else {
             throw error("bad utf-8 encoding at " + codeName(ch));
+        }
     }
 
     /**
@@ -3319,17 +3241,14 @@ public class Hessian2Input
             }
 
             int code = read();
-
             switch (code) {
                 case BC_BINARY_CHUNK:
                     _isLastChunk = false;
-
                     _chunkLength = (read() << 8) + read();
                     break;
 
                 case 'B':
                     _isLastChunk = true;
-
                     _chunkLength = (read() << 8) + read();
                     break;
 
@@ -3350,7 +3269,6 @@ public class Hessian2Input
                 case 0x2e:
                 case 0x2f:
                     _isLastChunk = true;
-
                     _chunkLength = code - 0x20;
                     break;
 
@@ -3379,7 +3297,6 @@ public class Hessian2Input
     public InputStream readInputStream()
             throws IOException {
         int tag = read();
-
         switch (tag) {
             case 'N':
                 return null;
@@ -3430,25 +3347,22 @@ public class Hessian2Input
     int read(byte[] buffer, int offset, int length)
             throws IOException {
         int readLength = 0;
-
         while (length > 0) {
             while (_chunkLength <= 0) {
-                if (_isLastChunk)
+                if (_isLastChunk) {
                     return readLength == 0 ? -1 : readLength;
+                }
 
                 int code = read();
-
                 switch (code) {
                     case BC_BINARY_CHUNK:
                     case 'b': //maybe it's a mistype of BC_BINARY_CHUNK
                         _isLastChunk = false;
-
                         _chunkLength = (read() << 8) + read();
                         break;
 
                     case BC_BINARY:
                         _isLastChunk = true;
-
                         _chunkLength = (read() << 8) + read();
                         break;
 
@@ -3484,14 +3398,17 @@ public class Hessian2Input
             }
 
             int sublen = _chunkLength;
-            if (length < sublen)
+            if (length < sublen) {
                 sublen = length;
+            }
 
-            if (_length <= _offset && !readBuffer())
+            if (_length <= _offset && !readBuffer()) {
                 return -1;
+            }
 
-            if (_length - _offset < sublen)
+            if (_length - _offset < sublen) {
                 sublen = _length - _offset;
+            }
 
             System.arraycopy(_buffer, _offset, buffer, offset, sublen);
 
@@ -3512,13 +3429,14 @@ public class Hessian2Input
      */
     public final int read()
             throws IOException {
-        if (_length <= _offset && !readBuffer())
+        if (_length <= _offset && !readBuffer()) {
             return -1;
+        }
 
         return _buffer[_offset++] & 0xff;
     }
 
-    private final boolean readBuffer()
+    private boolean readBuffer()
             throws IOException {
         byte[] buffer = _buffer;
         int offset = _offset;
@@ -3527,11 +3445,11 @@ public class Hessian2Input
         if (offset < length) {
             System.arraycopy(buffer, offset, buffer, 0, length - offset);
             offset = length - offset;
-        } else
+        } else {
             offset = 0;
+        }
 
         int len = _is.read(buffer, offset, SIZE - offset);
-
         if (len <= 0) {
             _length = offset;
             _offset = 0;
@@ -3559,35 +3477,34 @@ public class Hessian2Input
 
             try {
                 Object obj = readObject();
-
                 if (obj != null) {
                     return error("expected " + expect
                             + " at 0x" + Integer.toHexString(ch & 0xff)
                             + " " + obj.getClass().getName() + " (" + obj + ")");
-                } else
-                    return error("expected " + expect
-                            + " at 0x" + Integer.toHexString(ch & 0xff) + " null");
+                } else {
+                    return error("expected " + expect + " at 0x" + Integer.toHexString(ch & 0xff) + " null");
+                }
             } catch (IOException e) {
                 log.log(Level.FINE, e.toString(), e);
-
-                return error("expected " + expect
-                        + " at 0x" + Integer.toHexString(ch & 0xff));
+                return error("expected " + expect + " at 0x" + Integer.toHexString(ch & 0xff));
             }
         }
     }
 
     protected String codeName(int ch) {
-        if (ch < 0)
+        if (ch < 0) {
             return "end of file";
-        else
+        } else {
             return "0x" + Integer.toHexString(ch & 0xff) + " (" + (char) +ch + ")";
+        }
     }
 
     protected IOException error(String message) {
-        if (_method != null)
+        if (_method != null) {
             return new HessianProtocolException(_method + ": " + message);
-        else
+        } else {
             return new HessianProtocolException(message);
+        }
     }
 
     @Override
@@ -3596,11 +3513,10 @@ public class Hessian2Input
         InputStream is = _is;
         _is = null;
 
-        if (_isCloseStreamOnClose && is != null)
+        if (_isCloseStreamOnClose && is != null) {
             is.close();
+        }
     }
-
-    ;
 
     final static class ObjectDefinition {
         private final String _type;
@@ -3626,12 +3542,14 @@ public class Hessian2Input
         @Override
         public int read()
                 throws IOException {
-            if (_isClosed)
+            if (_isClosed) {
                 return -1;
+            }
 
             int ch = parseByte();
-            if (ch < 0)
+            if (ch < 0) {
                 _isClosed = true;
+            }
 
             return ch;
         }
@@ -3639,12 +3557,14 @@ public class Hessian2Input
         @Override
         public int read(byte[] buffer, int offset, int length)
                 throws IOException {
-            if (_isClosed)
+            if (_isClosed) {
                 return -1;
+            }
 
             int len = Hessian2Input.this.read(buffer, offset, length);
-            if (len < 0)
+            if (len < 0) {
                 _isClosed = true;
+            }
 
             return len;
         }

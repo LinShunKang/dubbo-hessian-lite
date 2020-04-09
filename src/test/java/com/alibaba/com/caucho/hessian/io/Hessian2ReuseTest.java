@@ -134,10 +134,10 @@ public class Hessian2ReuseTest extends SerializeTestBase {
             obj.shortSet.add((short) i);
             obj.shortSet.add((short) (i * 2));
 
-//            shortType.stringShortMap.put(String.valueOf(i), (short) i);
-//            shortType.stringShortMap.put(String.valueOf(i * 100), (short) (i * 100));
+            obj.stringShortMap.put(String.valueOf(i), (short) i);
+            obj.stringShortMap.put(String.valueOf(i * 100), (short) (i * 100));
 
-//            shortType.stringByteMap.put(String.valueOf(i), (byte) 1);
+            obj.stringByteMap.put(String.valueOf(i), (byte) 1);
 
             List<Short> shorts = Arrays.asList((short) 12, (short) 4);
             PersonType abc = new PersonType("ABC", 12, 128D, (short) 1, (byte) 2, shorts);
