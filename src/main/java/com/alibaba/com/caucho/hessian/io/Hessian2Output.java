@@ -49,6 +49,7 @@
 package com.alibaba.com.caucho.hessian.io;
 
 import com.alibaba.com.caucho.hessian.util.IdentityIntMap;
+import com.alibaba.com.caucho.hessian.util.IntMap;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -85,9 +86,9 @@ public class Hessian2Output
     private final IdentityIntMap _refs = new IdentityIntMap();
     private boolean _isCloseStreamOnClose;
     // map of classes
-    private final HashMap<Object, Integer> _classRefs = new HashMap<>();
+    private final IntMap _classRefs = new IntMap(32);
     // map of types
-    private final HashMap<Object, Integer> _typeRefs = new HashMap<>();
+    private final IntMap _typeRefs = new IntMap(32);
 
     private int _offset;
 
@@ -504,9 +505,8 @@ public class Hessian2Output
     @Override
     public int writeObjectBegin(String type)
             throws IOException {
-        Integer refV = _classRefs.get(type);
-        if (refV != null) {
-            int ref = refV;
+        int ref = _classRefs.get(type);
+        if (ref != IntMap.NULL) {
             if (_FLUSH_OFFSET < _offset) {
                 flush();
             }
@@ -565,8 +565,8 @@ public class Hessian2Output
             throw new IllegalArgumentException("empty type is not allowed");
         }
 
-        Integer typeRef = _typeRefs.get(type);
-        if (typeRef != null) {
+        int typeRef = _typeRefs.get(type);
+        if (typeRef != IntMap.NULL) {
             writeInt(typeRef);
         } else {
             _typeRefs.put(type, _typeRefs.size());
